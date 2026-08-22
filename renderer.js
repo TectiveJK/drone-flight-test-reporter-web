@@ -36,14 +36,45 @@ function newFlight(number = state.flights.length + 1) { return { id: crypto.rand
 function readShared() { sharedFields.forEach(k => state.report[k] = $(k).value.trim()); }
 function writeShared() { sharedFields.forEach(k => { $(k).value = state.report[k] || ''; }); }
 function readFlight() { const f=state.flights[state.activeFlight]; if(!f)return; flightFields.forEach(k=>f[k]=$(k).value); f.flightLogPath=state.flightLogPath; f.captureFilePath=state.captureFilePath; f.attachments=[...state.attachments]; f.lastVoiceNote=state.lastVoiceNote||f.lastVoiceNote||null; }
-function writeFlight() { const f=state.flights[state.activeFlight]; if(!f)return; flightFields.forEach(k=>$(k).value=f[k]??''); state.flightLogPath=f.flightLogPath||''; state.captureFilePath=f.captureFilePath||''; state.attachments=[...(f.attachments||[])]; state.lastVoiceNote=f.lastVoiceNote||findLatestVoiceAttachment(state.attachments); $('flightTitle').textContent=`Flight ${String(f.flightNumber).padStart(2,'0')}`; $('flightLogPathDisplay').textContent=state.flightLogPath||'Not selected'; $('captureFilePathDisplay').textContent=state.captureFilePath||'Not selected'; renderAttachments(); renderFlights(); updatePlayVoiceButton(); }
+function writeFlight() { const f=state.flights[state.activeFlight]; if(!f)return; flightFields.forEach(k=>$(k).value=f[k]??''); state.flightLogPath=f.flightLogPath||''; state.captureFilePath=f.captureFilePath||''; state.attachments=[...(f.attachments||[])]; state.lastVoiceNote=f.lastVoiceNote||findLatestVoiceAttachment(state.attachments); $('flightTitle').textContent=`Flight ${String(f.flightNumber).padStart(2,'0')}`; $('flightLogPathDisplay').textContent=state.flightLogPath||'Not selected'; $('captureFilePathDisplay').textContent=state.captureFilePath||'Not selected'; renderAttachments(); renderFlights(); syncVoicePlayer(state.lastVoiceNote); updatePlayVoiceButton(); }
 function renderFlights() { $('flightCount').textContent=state.flights.length; $('flightList').innerHTML=state.flights.map((f,i)=>`<button class="flight-item ${i===state.activeFlight?'active':''}" data-index="${i}"><span>Flight ${String(f.flightNumber).padStart(2,'0')}</span><small>${esc(f.flightResult)}</small></button>`).join(''); document.querySelectorAll('.flight-item').forEach(b=>b.addEventListener('click',()=>{readFlight();state.activeFlight=Number(b.dataset.index);writeFlight();})); }
 function renumberFlights() { state.flights.forEach((f,i)=>f.flightNumber=i+1); }
 function addFlight() { readFlight(); state.flights.push(newFlight()); state.activeFlight=state.flights.length-1; writeFlight(); }
 function removeCurrentFlight() { if(state.flights.length<=1){alert('A report must contain at least one flight.');return;} if(!confirm(`Remove Flight ${String(state.activeFlight+1).padStart(2,'0')} from this report?`))return; state.flights.splice(state.activeFlight,1); renumberFlights(); state.activeFlight=Math.min(state.activeFlight,state.flights.length-1); writeFlight(); }
 function resetReport() { state.report={};state.flights=[newFlight(1)];state.activeFlight=0;state.attachments=[];state.flightLogPath='';state.captureFilePath='';state.lastVoiceNote=null;stopVoicePlayback();writeShared();writeFlight();$('reportPreview').innerHTML='<p>Add flights and generate the report.</p>'; }
 function loadReport(data) { if(!data||!Array.isArray(data.flights)||!data.flights.length){alert('This JSON file is not a valid Drone Flight Test Report.');return;} state.report={}; sharedFields.forEach(k=>state.report[k]=data[k]||''); state.flights=data.flights.map((f,i)=>{ const attachments=(f.attachments||[]).map(normalizeAttachment); return {...newFlight(i+1),...f,flightNumber:i+1,attachments,flightLogPath:f.flightLogPath||'',captureFilePath:f.captureFilePath||'',lastVoiceNote:f.lastVoiceNote||findLatestVoiceAttachment(attachments)}; }); state.activeFlight=0; writeShared();writeFlight();generate(); }
-function renderAttachments() { $('attachmentList').innerHTML=state.attachments.length?state.attachments.map((p,i)=>{ const name=attachmentName(p); return `<div class="attachment-item"><span title="${esc(name)}">${esc(name)}</span><button class="remove-attachment secondary" data-index="${i}">Remove</button></div>`; }).join(''):'<em>No evidence attached.</em>'; document.querySelectorAll('.remove-attachment').forEach(b=>b.addEventListener('click',()=>{readFlight();state.attachments.splice(Number(b.dataset.index),1);writeFlight();})); }
+function renderAttachments() {
+  $('attachmentList').innerHTML = state.attachments.length
+    ? state.attachments.map((p, i) => {
+        const name = attachmentName(p);
+        return `<div class="attachment-item"><span title="${esc(name)}">${esc(name)}</span><button type="button" class="remove-attachment secondary" data-index="${i}">Remove</button></div>`;
+      }).join('')
+    : '<em>No evidence attached.</em>';
+  document.querySelectorAll('.remove-attachment').forEach((b) => {
+    b.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      removeAttachmentAt(Number(b.dataset.index));
+    });
+  });
+}
+function removeAttachmentAt(index) {
+  if (!Number.isInteger(index) || index < 0 || index >= state.attachments.length) return;
+  // Keep form fields synced, then mutate attachments on both state and active flight
+  // before writeFlight() reloads attachments from the flight object.
+  readFlight();
+  const removed = state.attachments[index];
+  state.attachments.splice(index, 1);
+  const flight = state.flights[state.activeFlight];
+  if (flight) flight.attachments = [...state.attachments];
+  if (removed && state.lastVoiceNote && attachmentName(removed) === attachmentName(state.lastVoiceNote)) {
+    stopVoicePlayback();
+    state.lastVoiceNote = findLatestVoiceAttachment(state.attachments);
+    if (flight) flight.lastVoiceNote = state.lastVoiceNote;
+  }
+  writeFlight();
+  setVoiceStatus(removed ? `Removed ${attachmentName(removed)}.` : 'Attachment removed.');
+}
 function timeline(text) { return text.split(/\n+/).map(x=>x.trim()).filter(Boolean).map(line=>{const m=line.match(/^(\d{1,2}:\d{2}(?:\s*[AP]M)?)\s*[—\-:]?\s*(.*)$/i);return m?{time:m[1],note:m[2]}:{time:'',note:line};}); }
 function overallResult() { const r=state.flights.map(f=>f.flightResult); if(r.includes('Fail'))return 'FAIL'; if(r.includes('Aborted'))return 'ABORTED'; if(r.includes('Pass with observations'))return 'PASS WITH OBSERVATIONS'; if(r.length&&r.every(x=>x==='Pass'))return 'PASS'; return 'PENDING'; }
 function reportData() { readShared();readFlight();return {version:5,createdAt:new Date().toISOString(),...state.report,overallResult:overallResult(),flights:state.flights.map((f,i)=>{ const {missionId, ...flight} = f; return {...flight,flightNumber:i+1,attachments:(flight.attachments||[]).map(normalizeAttachment),timeline:timeline(f.operatorNotes)}; })}; }
@@ -79,64 +110,90 @@ let voiceDesired = false;
 let mediaRecorder = null;
 let mediaStream = null;
 let recordedChunks = [];
-let voiceAudio = null;
+let voiceObjectUrl = null;
 
+function pickRecorderMimeType() {
+  if (typeof MediaRecorder === 'undefined') return '';
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/mp4',
+  ];
+  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+}
 function findLatestVoiceAttachment(attachments = []) {
   const voiceNotes = (attachments || [])
     .map(normalizeAttachment)
     .filter((a) => a.dataUrl && (String(a.type).startsWith('audio/') || String(a.name).startsWith('voice-note-')));
   return voiceNotes.length ? voiceNotes[voiceNotes.length - 1] : null;
 }
+function syncVoicePlayer(note) {
+  const player = $('voicePlayer');
+  if (!player) return;
+  if (voiceObjectUrl) {
+    URL.revokeObjectURL(voiceObjectUrl);
+    voiceObjectUrl = null;
+  }
+  if (!note || !note.dataUrl) {
+    player.removeAttribute('src');
+    player.load();
+    player.classList.remove('is-visible');
+    return;
+  }
+  player.src = note.dataUrl;
+  player.volume = 1;
+  player.muted = false;
+  player.classList.add('is-visible');
+  player.load();
+}
 function updatePlayVoiceButton() {
   const btn = $('playVoiceButton');
+  const player = $('voicePlayer');
   if (!btn) return;
   const hasNote = Boolean(state.lastVoiceNote && state.lastVoiceNote.dataUrl);
   const listening = Boolean(voiceDesired || (mediaRecorder && mediaRecorder.state === 'recording'));
   btn.disabled = !hasNote || listening;
-  if (voiceAudio && !voiceAudio.paused) btn.textContent = 'Stop Playback';
+  if (player && !player.paused && !player.ended && player.currentTime > 0) btn.textContent = 'Stop Playback';
   else btn.textContent = 'Listen to Voice Note';
 }
 function stopVoicePlayback() {
-  if (voiceAudio) {
-    try { voiceAudio.pause(); voiceAudio.currentTime = 0; } catch (err) {}
-    voiceAudio = null;
+  const player = $('voicePlayer');
+  if (player) {
+    try { player.pause(); player.currentTime = 0; } catch (err) {}
   }
   updatePlayVoiceButton();
 }
-function playVoiceNote() {
-  if (voiceAudio && !voiceAudio.paused) {
-    stopVoicePlayback();
-    setVoiceStatus('Playback stopped.');
-    return;
-  }
+async function playVoiceNote() {
+  const player = $('voicePlayer');
   const note = state.lastVoiceNote || findLatestVoiceAttachment(state.attachments);
   if (!note || !note.dataUrl) {
     setVoiceStatus('No recorded voice note to play yet. Record one first.');
     updatePlayVoiceButton();
     return;
   }
-  stopVoicePlayback();
-  voiceAudio = new Audio(note.dataUrl);
-  voiceAudio.onended = () => {
-    voiceAudio = null;
-    setVoiceStatus(`Finished playing ${note.name || 'voice note'}.`);
+  if (!player) {
+    setVoiceStatus('Audio player is missing from the page.');
+    return;
+  }
+  if (!player.paused && !player.ended) {
+    stopVoicePlayback();
+    setVoiceStatus('Playback stopped.');
+    return;
+  }
+
+  syncVoicePlayer(note);
+  // Some browsers need a fresh play() after load().
+  try {
+    player.volume = 1;
+    player.muted = false;
+    await player.play();
+    setVoiceStatus(`Playing ${note.name || 'voice note'}… Use the audio bar if needed.`);
     updatePlayVoiceButton();
-  };
-  voiceAudio.onerror = () => {
-    setVoiceStatus('Could not play the recorded voice note.');
-    voiceAudio = null;
+  } catch (error) {
+    setVoiceStatus(`Playback failed: ${error.message || error}. Try the audio controls below.`);
     updatePlayVoiceButton();
-  };
-  voiceAudio.play()
-    .then(() => {
-      setVoiceStatus(`Playing ${note.name || 'voice note'}…`);
-      updatePlayVoiceButton();
-    })
-    .catch((error) => {
-      setVoiceStatus(`Playback failed: ${error.message || error}`);
-      voiceAudio = null;
-      updatePlayVoiceButton();
-    });
+  }
 }
 
 function setVoiceStatus(text) { $('voiceStatus').textContent = text; }
@@ -155,8 +212,8 @@ function appendOperatorNote(text) {
 function voiceErrorMessage(code) {
   const map = {
     'not-allowed': 'Microphone permission denied. Allow mic access for this site, then try again.',
-    'service-not-allowed': 'Speech service blocked (common in Brave). Allow Google speech services or use Chrome, or use audio recording fallback.',
-    'network': 'Speech service network error. Check internet connection, or use Chrome. Audio recording still works offline.',
+    'service-not-allowed': 'Speech service blocked (common in Brave). Transcription may fail, but audio recording still works.',
+    'network': 'Speech service network error. Audio recording still works.',
     'audio-capture': 'No microphone found or mic is busy.',
     'no-speech': 'No speech detected. Click Start Voice Note and speak again.',
     'aborted': 'Voice note stopped.',
@@ -170,7 +227,18 @@ async function ensureMicrophone() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw new Error('This browser cannot access the microphone.');
   }
-  mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  // Dedicated stream for MediaRecorder so speech recognition cannot mute it.
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((t) => t.stop());
+    mediaStream = null;
+  }
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+  });
   return mediaStream;
 }
 function stopMediaTracks() {
@@ -188,7 +256,7 @@ function startSpeechRecognition() {
   recognition.lang = 'en-US';
   recognition.onstart = () => {
     setVoiceButtons(true);
-    setVoiceStatus('Listening… speak now. Click Stop when finished.');
+    setVoiceStatus('Listening + recording… speak now. Click Stop when finished.');
   };
   recognition.onresult = (event) => {
     let finalText = '';
@@ -200,51 +268,51 @@ function startSpeechRecognition() {
     }
     if (finalText) appendOperatorNote(finalText);
     if (interim) setVoiceStatus(`Listening… ${interim}`);
-    else if (voiceDesired) setVoiceStatus('Listening… speak now. Click Stop when finished.');
+    else if (voiceDesired) setVoiceStatus('Listening + recording… speak now. Click Stop when finished.');
   };
   recognition.onerror = (event) => {
     const code = event.error || 'unknown';
-    setVoiceStatus(voiceErrorMessage(code));
-    if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'network') {
-      // Keep mic recording fallback running if already started.
-      if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-        startAudioRecordingFallback().catch(() => {});
-      }
+    // Keep recording even when transcription fails.
+    if (code !== 'aborted' && code !== 'no-speech') {
+      setVoiceStatus(`${voiceErrorMessage(code)} Recording continues…`);
     }
   };
   recognition.onend = () => {
     if (voiceDesired) {
-      // Chromium ends recognition after pauses; restart while user still wants listening.
       try { recognition.start(); }
-      catch (err) {
-        setVoiceButtons(false);
-        voiceDesired = false;
-        setVoiceStatus('Voice recognition stopped. Click Start Voice Note to try again.');
-      }
+      catch (err) { /* ignore restart errors while recording continues */ }
       return;
     }
     setVoiceButtons(false);
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-      setVoiceStatus('Voice transcription idle.');
-    }
   };
   recognition.start();
   return true;
 }
 async function startAudioRecordingFallback() {
+  if (typeof MediaRecorder === 'undefined') {
+    throw new Error('Audio recording is not supported in this browser.');
+  }
   const stream = mediaStream || await ensureMicrophone();
   recordedChunks = [];
-  mediaRecorder = new MediaRecorder(stream);
+  const mimeType = pickRecorderMimeType();
+  mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
   mediaRecorder.ondataavailable = (event) => {
     if (event.data && event.data.size) recordedChunks.push(event.data);
   };
   mediaRecorder.onstop = async () => {
     try {
       if (!recordedChunks.length) {
-        setVoiceStatus('No audio captured.');
+        setVoiceStatus('No audio captured. Check microphone input and try again.');
+        setVoiceButtons(false);
         return;
       }
-      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      const blobType = mediaRecorder.mimeType || mimeType || 'audio/webm';
+      const blob = new Blob(recordedChunks, { type: blobType });
+      if (blob.size < 500) {
+        setVoiceStatus('Recording was too short or silent. Try again and speak closer to the mic.');
+        setVoiceButtons(false);
+        return;
+      }
       const ext = (blob.type.includes('mp4') && 'mp4') || (blob.type.includes('ogg') && 'ogg') || 'webm';
       const name = `voice-note-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
       const dataUrl = await new Promise((resolve, reject) => {
@@ -255,24 +323,32 @@ async function startAudioRecordingFallback() {
       });
       readFlight();
       const existing = new Map(state.attachments.map((a) => [attachmentName(a), normalizeAttachment(a)]));
-      existing.set(name, { name, type: blob.type || 'audio/webm', size: blob.size, dataUrl });
+      existing.set(name, { name, type: blob.type || blobType, size: blob.size, dataUrl });
       state.attachments = [...existing.values()];
-      state.lastVoiceNote = { name, type: blob.type || 'audio/webm', size: blob.size, dataUrl };
+      state.lastVoiceNote = { name, type: blob.type || blobType, size: blob.size, dataUrl };
+      const flight = state.flights[state.activeFlight];
+      if (flight) {
+        flight.attachments = [...state.attachments];
+        flight.lastVoiceNote = state.lastVoiceNote;
+      }
       appendOperatorNote(`Voice audio recorded: ${name}`);
       writeFlight();
-      setVoiceStatus(`Audio voice note saved. Click “Listen to Voice Note” to play it back.`);
+      syncVoicePlayer(state.lastVoiceNote);
+      setVoiceStatus(`Saved ${name} (${Math.round(blob.size / 1024)} KB). Click Listen or use the audio bar.`);
       updatePlayVoiceButton();
     } catch (error) {
       setVoiceStatus(`Could not save audio note: ${error.message || error}`);
+      setVoiceButtons(false);
     } finally {
       stopMediaTracks();
       mediaRecorder = null;
       recordedChunks = [];
     }
   };
-  mediaRecorder.start();
+  // Timeslice keeps chunks flowing so stop() always has audio data.
+  mediaRecorder.start(250);
   setVoiceButtons(true);
-  setVoiceStatus('Recording audio note… click Stop Voice Note to save it.');
+  setVoiceStatus('Recording audio note… speak now, then click Stop Voice Note.');
 }
 async function startVoice() {
   if (voiceDesired) return;
@@ -291,22 +367,7 @@ async function startVoice() {
     return;
   }
 
-  const hasSpeech = Boolean(getSpeechRecognition());
-  if (hasSpeech) {
-    try {
-      startSpeechRecognition();
-      // Also record audio in parallel so Brave/network speech failures still capture a note.
-      if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-        await startAudioRecordingFallback();
-        setVoiceStatus('Listening + recording… speak now. Click Stop when finished.');
-      }
-      return;
-    } catch (error) {
-      setVoiceStatus(`Speech recognition failed: ${error.message || error}. Falling back to audio recording.`);
-    }
-  } else {
-    setVoiceStatus('Live transcription unavailable here. Recording audio note instead…');
-  }
+  // Always record audible audio first. Speech-to-text is optional and must not own the mic stream.
   try {
     await startAudioRecordingFallback();
   } catch (error) {
@@ -314,6 +375,14 @@ async function startVoice() {
     setVoiceButtons(false);
     stopMediaTracks();
     setVoiceStatus(`Voice note failed: ${error.message || error}`);
+    return;
+  }
+
+  if (getSpeechRecognition()) {
+    try { startSpeechRecognition(); }
+    catch (error) {
+      setVoiceStatus(`Recording… (live transcription unavailable: ${error.message || error})`);
+    }
   }
 }
 function stopVoice() {
@@ -335,5 +404,15 @@ function stopVoice() {
 sharedFields.forEach(id=>$(id).addEventListener('input',readShared)); flightFields.forEach(id=>$(id).addEventListener('input',readFlight));
 $('addFlightButton').addEventListener('click',addFlight); $('removeFlightButton').addEventListener('click',removeCurrentFlight); $('newReportButton').addEventListener('click',()=>{if(confirm('Start a new report? Unsaved data will be cleared.'))resetReport();}); $('openReportButton').addEventListener('click',openReport);
 $('selectFlightLogButton').addEventListener('click',()=>selectFile('log')); $('selectCaptureButton').addEventListener('click',()=>selectFile('capture')); $('addAttachmentButton').addEventListener('click',addAttachments); $('startVoiceButton').addEventListener('click',startVoice); $('stopVoiceButton').addEventListener('click',stopVoice); $('playVoiceButton').addEventListener('click',playVoiceNote); $('generateReportButton').addEventListener('click',generate);
+(() => {
+  const player = $('voicePlayer');
+  if (!player) return;
+  player.addEventListener('play', updatePlayVoiceButton);
+  player.addEventListener('pause', updatePlayVoiceButton);
+  player.addEventListener('ended', () => {
+    setVoiceStatus('Finished playing voice note.');
+    updatePlayVoiceButton();
+  });
+})();
 $('saveDataButton').addEventListener('click',async()=>{const d=reportData();const r=await window.api.saveJSON(d,`${d.testId||'flight-test-report'}.json`);if(!r.canceled)$('voiceStatus').textContent=`Report saved to ${r.filePath}`;}); $('exportMarkdownButton').addEventListener('click',async()=>{const d=reportData();const r=await window.api.saveMarkdown(buildMarkdown(d),`${d.testId||'flight-test-report'}.md`);if(!r.canceled)$('voiceStatus').textContent='Markdown report exported.';}); $('exportPdfButton').addEventListener('click',async()=>{const d=reportData();const r=await window.api.exportPDF(buildReportHTML(d),`${d.testId||'flight-test-report'}.pdf`);if(!r.canceled)$('voiceStatus').textContent='PDF report exported.';});
 resetReport();
