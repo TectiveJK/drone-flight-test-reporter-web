@@ -1,21 +1,38 @@
-# HOW TO INSTALL (Linux)
+# HOW TO INSTALL / UNINSTALL (Linux)
 
-1. Prefer installing from the git repo (no zip needed):
+## Uninstall the old version first
 
-   cd ~
-   git clone https://github.com/TectiveJK/drone-flight-test-reporter-web.git
-   cd drone-flight-test-reporter-web
-   git pull
-   chmod +x scripts/install-desktop.sh
-   ./scripts/install-desktop.sh
+```bash
+rm -f ~/.local/bin/drone-flight-test-reporter \
+  ~/.local/share/applications/drone-flight-test-reporter.desktop \
+  ~/Desktop/drone-flight-test-reporter.desktop \
+  ~/Desktop/"Drone Flight Test Reporter.desktop" \
+  ~/Bureaublad/drone-flight-test-reporter.desktop \
+  ~/Bureaublad/"Drone Flight Test Reporter.desktop"
+rm -rf ~/.local/share/drone-flight-test-reporter
+```
 
-2. After install, start the app with either:
-   - the Desktop shortcut "Drone Flight Test Reporter"
-   - or:
+Or, if you already unzipped this package:
 
-   ~/.local/bin/drone-flight-test-reporter
+```bash
+chmod +x uninstall-desktop.sh
+./uninstall-desktop.sh
+```
 
-3. If no shortcut appears, look in:
-   - ~/Desktop
-   - ~/Bureaublad   (Dutch Ubuntu)
-   - ~/.local/share/applications/
+## Install this package
+
+1. Download from GitHub Releases:
+   drone-flight-test-reporter-desktop-1.0.4.zip
+
+2. Unzip, open this folder, then run:
+
+```bash
+chmod +x install-desktop.sh
+./install-desktop.sh
+```
+
+3. Start the app with:
+
+```bash
+~/.local/bin/drone-flight-test-reporter
+```

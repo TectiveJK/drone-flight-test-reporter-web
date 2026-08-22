@@ -21,30 +21,39 @@ package_variant() {
 
 WEB_STAGED="$(package_variant web \
   index.html style.css renderer.js web-api.js \
-  manifest.webmanifest sw.js VERSION RELEASES.md README.md INSTALL-WEB.md INSTALL.txt
+  manifest.webmanifest sw.js VERSION RELEASES.md README.md INSTALL-WEB.md INSTALL.txt UNINSTALL.md
 )"
 cp "$ROOT/INSTALL-WEB.md" "$WEB_STAGED/README.md"
 
 IOS_STAGED="$(package_variant ios \
   index.html style.css renderer.js web-api.js \
-  manifest.webmanifest sw.js VERSION RELEASES.md README.md INSTALL-iOS.md INSTALL.txt
+  manifest.webmanifest sw.js VERSION RELEASES.md README.md INSTALL-iOS.md INSTALL.txt UNINSTALL.md
 )"
 cp "$ROOT/INSTALL-iOS.md" "$IOS_STAGED/README.md"
 
 DESKTOP_STAGED="$(package_variant desktop \
   index.html style.css renderer.js web-api.js \
   manifest.webmanifest sw.js VERSION RELEASES.md README.md \
-  INSTALL-WEB.md INSTALL-DESKTOP.md INSTALL.txt
+  INSTALL-WEB.md INSTALL-DESKTOP.md INSTALL.txt UNINSTALL.md
 )"
 cp "$ROOT/scripts/launch-desktop.sh" "$DESKTOP_STAGED/scripts/launch-desktop.sh"
 cp "$ROOT/scripts/install-desktop.sh" "$DESKTOP_STAGED/scripts/install-desktop.sh"
+cp "$ROOT/scripts/uninstall-desktop.sh" "$DESKTOP_STAGED/scripts/uninstall-desktop.sh"
 cp "$ROOT/scripts/install-desktop.bat" "$DESKTOP_STAGED/scripts/install-desktop.bat"
+cp "$ROOT/scripts/uninstall-desktop.bat" "$DESKTOP_STAGED/scripts/uninstall-desktop.bat"
 cp "$ROOT/scripts/launch-desktop.sh" "$DESKTOP_STAGED/launch-desktop.sh"
 cp "$ROOT/scripts/install-desktop.sh" "$DESKTOP_STAGED/install-desktop.sh"
+cp "$ROOT/scripts/uninstall-desktop.sh" "$DESKTOP_STAGED/uninstall-desktop.sh"
 cp "$ROOT/scripts/install-desktop.bat" "$DESKTOP_STAGED/install-desktop.bat"
+cp "$ROOT/scripts/uninstall-desktop.bat" "$DESKTOP_STAGED/uninstall-desktop.bat"
 cp "$ROOT/INSTALL-DESKTOP.md" "$DESKTOP_STAGED/README.md"
-chmod +x "$DESKTOP_STAGED/launch-desktop.sh" "$DESKTOP_STAGED/install-desktop.sh" \
-  "$DESKTOP_STAGED/scripts/launch-desktop.sh" "$DESKTOP_STAGED/scripts/install-desktop.sh"
+chmod +x \
+  "$DESKTOP_STAGED/launch-desktop.sh" \
+  "$DESKTOP_STAGED/install-desktop.sh" \
+  "$DESKTOP_STAGED/uninstall-desktop.sh" \
+  "$DESKTOP_STAGED/scripts/launch-desktop.sh" \
+  "$DESKTOP_STAGED/scripts/install-desktop.sh" \
+  "$DESKTOP_STAGED/scripts/uninstall-desktop.sh"
 
 (
   cd "$DIST/staging/web"
@@ -63,4 +72,4 @@ echo "Built:"
 ls -lh "$DIST"/*.zip
 echo
 echo "Desktop package contains:"
-unzip -l "$DIST/drone-flight-test-reporter-desktop-${VERSION}.zip" | grep -E 'install-desktop.sh|INSTALL.txt|/$' | head -20
+unzip -l "$DIST/drone-flight-test-reporter-desktop-${VERSION}.zip" | grep -E 'install-desktop.sh|uninstall-desktop.sh|INSTALL.txt|UNINSTALL.md|/$' | head -30
