@@ -1,4 +1,4 @@
-const CACHE = 'drone-flight-reporter-v1.0.1';
+const CACHE = 'drone-flight-reporter-v1.0.2';
 const ASSETS = [
   './',
   './index.html',

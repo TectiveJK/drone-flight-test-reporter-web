@@ -2,8 +2,10 @@
 
 ## Desktop app on this computer (recommended)
 
-1. Download [`drone-flight-test-reporter-desktop-1.0.1.zip`](https://github.com/TectiveJK/drone-flight-test-reporter-web/releases/download/v1.0.1/drone-flight-test-reporter-desktop-1.0.1.zip)
-2. Unzip it
+Use the **desktop** zip (not this web zip) if you want an app shortcut:
+
+1. Download [`drone-flight-test-reporter-desktop-1.0.2.zip`](https://github.com/TectiveJK/drone-flight-test-reporter-web/releases/download/v1.0.2/drone-flight-test-reporter-desktop-1.0.2.zip)
+2. Unzip and open the folder `drone-flight-test-reporter-desktop-1.0.2`
 3. Install:
    - **Linux:** `chmod +x install-desktop.sh && ./install-desktop.sh`
    - **Windows:** double-click `install-desktop.bat`
@@ -11,7 +13,7 @@
 
 See `INSTALL-DESKTOP.md`.
 
-## Browser-only
+## Browser-only (this package)
 
 1. Unzip this package.
 2. Open `index.html`, or serve locally:

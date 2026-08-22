@@ -2,14 +2,23 @@
 
 Browser, desktop, and iOS Progressive Web App for professional multi-flight drone test reporting.
 
-**Current version:** `1.0.1`
+**Current version:** `1.0.2`
 
 ## Install as an app on this computer
 
-1. Download [`drone-flight-test-reporter-desktop-1.0.1.zip`](https://github.com/TectiveJK/drone-flight-test-reporter-web/releases/download/v1.0.1/drone-flight-test-reporter-desktop-1.0.1.zip)
-2. Unzip
-3. Run `install-desktop.sh` (Linux) or `install-desktop.bat` (Windows)
-4. Launch **Drone Flight Test Reporter** from your app menu / Desktop
+Download the **desktop** package (name must include `desktop`):
+
+https://github.com/TectiveJK/drone-flight-test-reporter-web/releases/download/v1.0.2/drone-flight-test-reporter-desktop-1.0.2.zip
+
+Then:
+
+```bash
+cd ~/Downloads
+unzip -o drone-flight-test-reporter-desktop-1.0.2.zip
+cd drone-flight-test-reporter-desktop-1.0.2
+chmod +x install-desktop.sh
+./install-desktop.sh
+```
 
 Full steps: `INSTALL-DESKTOP.md`
 
