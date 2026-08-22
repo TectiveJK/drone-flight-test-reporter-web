@@ -13,7 +13,7 @@ LOG_FILE="${XDG_RUNTIME_DIR:-/tmp}/drone-flight-test-reporter-server.log"
 
 find_browser() {
   local c
-  for c in google-chrome-stable google-chrome chromium chromium-browser microsoft-edge brave-browser; do
+  for c in google-chrome-stable google-chrome chromium chromium-browser microsoft-edge brave-browser firefox; do
     if command -v "$c" >/dev/null 2>&1; then
       echo "$c"
       return 0
@@ -24,7 +24,7 @@ find_browser() {
 
 BROWSER="$(find_browser || true)"
 if [[ -z "${BROWSER}" ]]; then
-  echo "No Chrome/Chromium/Edge browser found. Install Chrome, then run this launcher again."
+  echo "No browser found. Install Google Chrome or Chromium, then try again."
   exit 1
 fi
 
@@ -60,12 +60,17 @@ for _ in range(50):
     except Exception:
         time.sleep(0.1)
 else:
-    raise SystemExit('Local app server failed to start')
+    raise SystemExit('Local app server failed to start. See: '"$LOG_FILE")
 PY
 
 URL="http://127.0.0.1:${PORT}/index.html"
-"$BROWSER" --new-window --app="$URL" >/dev/null 2>&1 || true
+echo "Opening ${URL} with ${BROWSER}"
 
-# Keep serving while the script is considered "running".
-# Exit when the server stops.
+if [[ "$BROWSER" == "firefox" ]]; then
+  "$BROWSER" --new-window "$URL" >/dev/null 2>&1 || "$BROWSER" "$URL" || true
+else
+  "$BROWSER" --new-window --app="$URL" >/dev/null 2>&1 || "$BROWSER" --new-window "$URL" >/dev/null 2>&1 || true
+fi
+
+# Keep serving until this process is stopped.
 wait "$SERVER_PID" || true
