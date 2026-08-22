@@ -107,26 +107,58 @@ async function addAttachments(){
 async function openReport(){ const r=await window.api.openJSON(); if(r.canceled)return; if(r.error){alert(r.error);return;} loadReport(r.data); $('voiceStatus').textContent=`Opened ${r.filePath}`; }
 
 let voiceDesired = false;
-let mediaRecorder = null;
 let mediaStream = null;
-let recordedChunks = [];
 let voiceObjectUrl = null;
+let audioContext = null;
+let audioSource = null;
+let audioProcessor = null;
+let audioSilence = null;
+let pcmChunks = [];
+let peakLevel = 0;
+let recordingStartedAt = 0;
 
-function pickRecorderMimeType() {
-  if (typeof MediaRecorder === 'undefined') return '';
-  const candidates = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/ogg;codecs=opus',
-    'audio/mp4',
-  ];
-  return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || '';
-}
 function findLatestVoiceAttachment(attachments = []) {
   const voiceNotes = (attachments || [])
     .map(normalizeAttachment)
     .filter((a) => a.dataUrl && (String(a.type).startsWith('audio/') || String(a.name).startsWith('voice-note-')));
   return voiceNotes.length ? voiceNotes[voiceNotes.length - 1] : null;
+}
+function setMicMeter(active, level = 0) {
+  const meter = document.querySelector('.mic-meter');
+  const bar = $('micLevelBar');
+  if (!meter || !bar) return;
+  meter.classList.toggle('is-active', active);
+  bar.style.width = `${Math.max(0, Math.min(100, Math.round(level * 100)))}%`;
+}
+function encodeWav(floatChunks, sampleRate) {
+  let total = 0;
+  floatChunks.forEach((chunk) => { total += chunk.length; });
+  const buffer = new ArrayBuffer(44 + total * 2);
+  const view = new DataView(buffer);
+  const writeString = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + total * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, total * 2, true);
+  let offset = 44;
+  floatChunks.forEach((chunk) => {
+    for (let i = 0; i < chunk.length; i++, offset += 2) {
+      const sample = Math.max(-1, Math.min(1, chunk[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    }
+  });
+  return new Blob([buffer], { type: 'audio/wav' });
 }
 function syncVoicePlayer(note) {
   const player = $('voicePlayer');
@@ -141,7 +173,16 @@ function syncVoicePlayer(note) {
     player.classList.remove('is-visible');
     return;
   }
-  player.src = note.dataUrl;
+  try {
+    const binary = atob(note.dataUrl.split(',')[1] || '');
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: note.type || 'audio/wav' });
+    voiceObjectUrl = URL.createObjectURL(blob);
+    player.src = voiceObjectUrl;
+  } catch (err) {
+    player.src = note.dataUrl;
+  }
   player.volume = 1;
   player.muted = false;
   player.classList.add('is-visible');
@@ -152,7 +193,7 @@ function updatePlayVoiceButton() {
   const player = $('voicePlayer');
   if (!btn) return;
   const hasNote = Boolean(state.lastVoiceNote && state.lastVoiceNote.dataUrl);
-  const listening = Boolean(voiceDesired || (mediaRecorder && mediaRecorder.state === 'recording'));
+  const listening = Boolean(voiceDesired);
   btn.disabled = !hasNote || listening;
   if (player && !player.paused && !player.ended && player.currentTime > 0) btn.textContent = 'Stop Playback';
   else btn.textContent = 'Listen to Voice Note';
@@ -181,21 +222,19 @@ async function playVoiceNote() {
     setVoiceStatus('Playback stopped.');
     return;
   }
-
   syncVoicePlayer(note);
-  // Some browsers need a fresh play() after load().
   try {
     player.volume = 1;
     player.muted = false;
+    await new Promise((r) => setTimeout(r, 50));
     await player.play();
-    setVoiceStatus(`Playing ${note.name || 'voice note'}… Use the audio bar if needed.`);
+    setVoiceStatus(`Playing ${note.name || 'voice note'}… Turn up system volume if needed.`);
     updatePlayVoiceButton();
   } catch (error) {
-    setVoiceStatus(`Playback failed: ${error.message || error}. Try the audio controls below.`);
+    setVoiceStatus(`Playback failed: ${error.message || error}. Use the audio bar controls below.`);
     updatePlayVoiceButton();
   }
 }
-
 function setVoiceStatus(text) { $('voiceStatus').textContent = text; }
 function setVoiceButtons(listening) {
   $('startVoiceButton').disabled = listening;
@@ -212,10 +251,10 @@ function appendOperatorNote(text) {
 function voiceErrorMessage(code) {
   const map = {
     'not-allowed': 'Microphone permission denied. Allow mic access for this site, then try again.',
-    'service-not-allowed': 'Speech service blocked (common in Brave). Transcription may fail, but audio recording still works.',
+    'service-not-allowed': 'Speech service blocked. Audio recording still works.',
     'network': 'Speech service network error. Audio recording still works.',
     'audio-capture': 'No microphone found or mic is busy.',
-    'no-speech': 'No speech detected. Click Start Voice Note and speak again.',
+    'no-speech': 'No speech detected.',
     'aborted': 'Voice note stopped.',
   };
   return map[code] || `Voice error: ${code}`;
@@ -227,13 +266,10 @@ async function ensureMicrophone() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw new Error('This browser cannot access the microphone.');
   }
-  // Dedicated stream for MediaRecorder so speech recognition cannot mute it.
-  if (mediaStream) {
-    mediaStream.getTracks().forEach((t) => t.stop());
-    mediaStream = null;
-  }
+  stopMediaTracks();
   mediaStream = await navigator.mediaDevices.getUserMedia({
     audio: {
+      channelCount: 1,
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
@@ -247,6 +283,19 @@ function stopMediaTracks() {
     mediaStream = null;
   }
 }
+function teardownAudioGraph() {
+  try { if (audioProcessor) audioProcessor.disconnect(); } catch (err) {}
+  try { if (audioSource) audioSource.disconnect(); } catch (err) {}
+  try { if (audioSilence) audioSilence.disconnect(); } catch (err) {}
+  audioProcessor = null;
+  audioSource = null;
+  audioSilence = null;
+  if (audioContext) {
+    audioContext.close().catch(() => {});
+    audioContext = null;
+  }
+  setMicMeter(false, 0);
+}
 function startSpeechRecognition() {
   const SR = getSpeechRecognition();
   if (!SR) return false;
@@ -254,101 +303,103 @@ function startSpeechRecognition() {
   recognition.continuous = true;
   recognition.interimResults = true;
   recognition.lang = 'en-US';
-  recognition.onstart = () => {
-    setVoiceButtons(true);
-    setVoiceStatus('Listening + recording… speak now. Click Stop when finished.');
-  };
   recognition.onresult = (event) => {
     let finalText = '';
-    let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
-      const piece = event.results[i][0].transcript;
-      if (event.results[i].isFinal) finalText += piece;
-      else interim += piece;
+      if (event.results[i].isFinal) finalText += event.results[i][0].transcript;
     }
     if (finalText) appendOperatorNote(finalText);
-    if (interim) setVoiceStatus(`Listening… ${interim}`);
-    else if (voiceDesired) setVoiceStatus('Listening + recording… speak now. Click Stop when finished.');
   };
-  recognition.onerror = (event) => {
-    const code = event.error || 'unknown';
-    // Keep recording even when transcription fails.
-    if (code !== 'aborted' && code !== 'no-speech') {
-      setVoiceStatus(`${voiceErrorMessage(code)} Recording continues…`);
-    }
-  };
+  recognition.onerror = () => {};
   recognition.onend = () => {
     if (voiceDesired) {
-      try { recognition.start(); }
-      catch (err) { /* ignore restart errors while recording continues */ }
-      return;
+      try { recognition.start(); } catch (err) {}
     }
-    setVoiceButtons(false);
   };
   recognition.start();
   return true;
 }
-async function startAudioRecordingFallback() {
-  if (typeof MediaRecorder === 'undefined') {
-    throw new Error('Audio recording is not supported in this browser.');
+async function saveVoiceRecording(blob) {
+  const name = `voice-note-${new Date().toISOString().replace(/[:.]/g, '-')}.wav`;
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('Failed to read audio'));
+    reader.readAsDataURL(blob);
+  });
+  readFlight();
+  const existing = new Map(state.attachments.map((a) => [attachmentName(a), normalizeAttachment(a)]));
+  existing.set(name, { name, type: 'audio/wav', size: blob.size, dataUrl });
+  state.attachments = [...existing.values()];
+  state.lastVoiceNote = { name, type: 'audio/wav', size: blob.size, dataUrl };
+  const flight = state.flights[state.activeFlight];
+  if (flight) {
+    flight.attachments = [...state.attachments];
+    flight.lastVoiceNote = state.lastVoiceNote;
   }
+  appendOperatorNote(`Voice audio recorded: ${name}`);
+  writeFlight();
+  syncVoicePlayer(state.lastVoiceNote);
+  setVoiceStatus(`Saved ${name} (${Math.round(blob.size / 1024)} KB). Click Listen or use the audio bar.`);
+  updatePlayVoiceButton();
+}
+async function startWavRecording() {
   const stream = mediaStream || await ensureMicrophone();
-  recordedChunks = [];
-  const mimeType = pickRecorderMimeType();
-  mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-  mediaRecorder.ondataavailable = (event) => {
-    if (event.data && event.data.size) recordedChunks.push(event.data);
-  };
-  mediaRecorder.onstop = async () => {
-    try {
-      if (!recordedChunks.length) {
-        setVoiceStatus('No audio captured. Check microphone input and try again.');
-        setVoiceButtons(false);
-        return;
-      }
-      const blobType = mediaRecorder.mimeType || mimeType || 'audio/webm';
-      const blob = new Blob(recordedChunks, { type: blobType });
-      if (blob.size < 500) {
-        setVoiceStatus('Recording was too short or silent. Try again and speak closer to the mic.');
-        setVoiceButtons(false);
-        return;
-      }
-      const ext = (blob.type.includes('mp4') && 'mp4') || (blob.type.includes('ogg') && 'ogg') || 'webm';
-      const name = `voice-note-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error || new Error('Failed to read audio'));
-        reader.readAsDataURL(blob);
-      });
-      readFlight();
-      const existing = new Map(state.attachments.map((a) => [attachmentName(a), normalizeAttachment(a)]));
-      existing.set(name, { name, type: blob.type || blobType, size: blob.size, dataUrl });
-      state.attachments = [...existing.values()];
-      state.lastVoiceNote = { name, type: blob.type || blobType, size: blob.size, dataUrl };
-      const flight = state.flights[state.activeFlight];
-      if (flight) {
-        flight.attachments = [...state.attachments];
-        flight.lastVoiceNote = state.lastVoiceNote;
-      }
-      appendOperatorNote(`Voice audio recorded: ${name}`);
-      writeFlight();
-      syncVoicePlayer(state.lastVoiceNote);
-      setVoiceStatus(`Saved ${name} (${Math.round(blob.size / 1024)} KB). Click Listen or use the audio bar.`);
-      updatePlayVoiceButton();
-    } catch (error) {
-      setVoiceStatus(`Could not save audio note: ${error.message || error}`);
-      setVoiceButtons(false);
-    } finally {
-      stopMediaTracks();
-      mediaRecorder = null;
-      recordedChunks = [];
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) throw new Error('Web Audio API is not available in this browser.');
+  audioContext = new AudioCtx();
+  if (audioContext.state === 'suspended') await audioContext.resume();
+  audioSource = audioContext.createMediaStreamSource(stream);
+  audioProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+  audioSilence = audioContext.createGain();
+  audioSilence.gain.value = 0;
+  pcmChunks = [];
+  peakLevel = 0;
+  recordingStartedAt = Date.now();
+  audioProcessor.onaudioprocess = (event) => {
+    const input = event.inputBuffer.getChannelData(0);
+    const copy = new Float32Array(input.length);
+    copy.set(input);
+    pcmChunks.push(copy);
+    let sum = 0;
+    let peak = 0;
+    for (let i = 0; i < input.length; i++) {
+      const v = Math.abs(input[i]);
+      sum += v * v;
+      if (v > peak) peak = v;
+    }
+    const rms = Math.sqrt(sum / input.length);
+    peakLevel = Math.max(peakLevel, peak);
+    setMicMeter(true, Math.min(1, rms * 4));
+    if (voiceDesired) {
+      setVoiceStatus(`Recording… mic level ${Math.round(Math.min(1, rms * 4) * 100)}%. Speak, then click Stop.`);
     }
   };
-  // Timeslice keeps chunks flowing so stop() always has audio data.
-  mediaRecorder.start(250);
+  audioSource.connect(audioProcessor);
+  audioProcessor.connect(audioSilence);
+  audioSilence.connect(audioContext.destination);
   setVoiceButtons(true);
-  setVoiceStatus('Recording audio note… speak now, then click Stop Voice Note.');
+  setMicMeter(true, 0);
+  setVoiceStatus('Recording… speak now. Watch the blue mic level bar move.');
+}
+async function stopWavRecording() {
+  const sampleRate = audioContext ? audioContext.sampleRate : 44100;
+  const chunks = pcmChunks.slice();
+  const peak = peakLevel;
+  const elapsedMs = Date.now() - recordingStartedAt;
+  teardownAudioGraph();
+  stopMediaTracks();
+  setVoiceButtons(false);
+  if (!chunks.length || elapsedMs < 400) {
+    setVoiceStatus('Recording was too short. Hold Start, speak for at least 1 second, then Stop.');
+    return;
+  }
+  if (peak < 0.01) {
+    setVoiceStatus('No microphone sound detected (silent recording). Check Brave mic permission/input device and try again.');
+    return;
+  }
+  const blob = encodeWav(chunks, sampleRate);
+  await saveVoiceRecording(blob);
 }
 async function startVoice() {
   if (voiceDesired) return;
@@ -358,32 +409,19 @@ async function startVoice() {
   updatePlayVoiceButton();
   try {
     await ensureMicrophone();
+    await startWavRecording();
   } catch (error) {
     voiceDesired = false;
+    teardownAudioGraph();
+    stopMediaTracks();
     setVoiceButtons(false);
     setVoiceStatus(error && error.name === 'NotAllowedError'
       ? voiceErrorMessage('not-allowed')
       : `Microphone error: ${error.message || error}`);
     return;
   }
-
-  // Always record audible audio first. Speech-to-text is optional and must not own the mic stream.
-  try {
-    await startAudioRecordingFallback();
-  } catch (error) {
-    voiceDesired = false;
-    setVoiceButtons(false);
-    stopMediaTracks();
-    setVoiceStatus(`Voice note failed: ${error.message || error}`);
-    return;
-  }
-
-  if (getSpeechRecognition()) {
-    try { startSpeechRecognition(); }
-    catch (error) {
-      setVoiceStatus(`Recording… (live transcription unavailable: ${error.message || error})`);
-    }
-  }
+  // Live transcription is disabled during recording so the mic stays dedicated
+  // to audible WAV capture/playback. Typed/voice text can still be entered manually.
 }
 function stopVoice() {
   voiceDesired = false;
@@ -391,12 +429,15 @@ function stopVoice() {
     try { recognition.onend = null; recognition.stop(); } catch (err) {}
     recognition = null;
   }
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    try { mediaRecorder.stop(); } catch (err) {}
+  if (audioProcessor || audioContext) {
+    stopWavRecording().catch((error) => {
+      setVoiceStatus(`Could not save recording: ${error.message || error}`);
+      setVoiceButtons(false);
+    });
   } else {
     stopMediaTracks();
     setVoiceButtons(false);
-    setVoiceStatus('Voice transcription idle.');
+    setVoiceStatus('Voice idle.');
   }
   updatePlayVoiceButton();
 }
