@@ -1,36 +1,30 @@
 # Install as a desktop app on this computer
 
-## Fastest way (Linux)
-
-1. Download `drone-flight-test-reporter-desktop-1.0.1.zip`
-2. Unzip it
-3. Run:
+## Linux (copy/paste)
 
 ```bash
+cd ~/Downloads
+unzip -o drone-flight-test-reporter-desktop-1.0.2.zip
+cd drone-flight-test-reporter-desktop-1.0.2
 chmod +x install-desktop.sh
 ./install-desktop.sh
 ```
 
-4. Open **Drone Flight Test Reporter** from your app menu or Desktop shortcut
+Then open **Drone Flight Test Reporter** from your app menu or Desktop.
+
+> Important: use the **desktop** zip, not `...-web-...` or `...-ios-...`.
+> `install-desktop.sh` only exists in the desktop package.
 
 ## Windows
 
-1. Download `drone-flight-test-reporter-desktop-1.0.1.zip`
+1. Download `drone-flight-test-reporter-desktop-1.0.2.zip`
 2. Unzip it
-3. Double-click `install-desktop.bat`
-4. Open **Drone Flight Test Reporter** from the Start Menu or Desktop
+3. Open the folder `drone-flight-test-reporter-desktop-1.0.2`
+4. Double-click `install-desktop.bat`
+5. Open **Drone Flight Test Reporter** from the Start Menu or Desktop
 
-## Chrome / Edge “Install app” (any OS)
+## Chrome / Edge “Install app”
 
-1. Unzip the web or desktop package
-2. In a terminal, from the unzipped folder:
-
-```bash
-python3 -m http.server 8080
-```
-
-3. Open Chrome or Edge at http://localhost:8080
-4. Click the **Install** icon in the address bar (or menu → **Install Drone Flight Test Reporter… / Install app**)
-5. Confirm Install
-
-The app then opens in its own window and appears in your system app list.
+1. From the unzipped desktop folder run: `python3 -m http.server 8080`
+2. Open http://localhost:8080 in Chrome/Edge
+3. Click **Install** in the address bar (or the in-app **Install App** button)

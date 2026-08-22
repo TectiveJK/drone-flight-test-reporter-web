@@ -1,0 +1,17 @@
+# HOW TO INSTALL (Linux)
+
+1. Make sure you downloaded:
+   drone-flight-test-reporter-desktop-1.0.2.zip
+   (NOT the web or ios zip)
+
+2. Unzip it, then open a terminal IN THIS FOLDER
+   (the folder that contains this file and install-desktop.sh)
+
+3. Run these commands:
+
+   chmod +x install-desktop.sh
+   ./install-desktop.sh
+
+4. Open "Drone Flight Test Reporter" from your app menu or Desktop.
+
+Windows users: double-click install-desktop.bat instead.
