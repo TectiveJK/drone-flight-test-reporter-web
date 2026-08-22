@@ -2,38 +2,34 @@
 
 Browser, desktop, and iOS Progressive Web App for professional multi-flight drone test reporting.
 
-**Current version:** `1.0.2`
+**Current version:** `1.0.3`
 
 ## Install as an app on this computer
 
-Download the **desktop** package (name must include `desktop`):
-
-https://github.com/TectiveJK/drone-flight-test-reporter-web/releases/download/v1.0.2/drone-flight-test-reporter-desktop-1.0.2.zip
-
-Then:
-
 ```bash
-cd ~/Downloads
-unzip -o drone-flight-test-reporter-desktop-1.0.2.zip
-cd drone-flight-test-reporter-desktop-1.0.2
-chmod +x install-desktop.sh
-./install-desktop.sh
+cd ~
+git clone https://github.com/TectiveJK/drone-flight-test-reporter-web.git
+cd drone-flight-test-reporter-web
+git pull
+chmod +x scripts/install-desktop.sh scripts/launch-desktop.sh
+./scripts/install-desktop.sh
 ```
 
+Then start it with:
+
+```bash
+~/.local/bin/drone-flight-test-reporter
+```
+
+Or use the Desktop / `Bureaublad` shortcut **Drone Flight Test Reporter**.
+
 Full steps: `INSTALL-DESKTOP.md`
-
-## iOS / iPadOS
-
-Download the iOS zip from [Releases](https://github.com/TectiveJK/drone-flight-test-reporter-web/releases), host/open in Safari, then **Share → Add to Home Screen**.
-
-See `INSTALL-iOS.md`.
 
 ## Features
 
 - Multi-flight reports
-- Evidence file attachments (images embedded in reports)
+- Evidence file attachments
 - JSON save/open, Markdown export, Print / PDF export
-- Voice notes where supported
 - Desktop app window and iOS home-screen install
 
 ## Local development
