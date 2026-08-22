@@ -1,4 +1,18 @@
-# Release Notes — Drone Flight Test Reporter (Web / iOS)
+# Release Notes — Drone Flight Test Reporter (Web / iOS / Desktop)
+
+## v1.0.1
+
+Desktop app install support for the web build.
+
+### Highlights
+- Linux/Windows desktop installer packages
+- App menu / Desktop shortcut launch in a dedicated Chrome/Edge app window
+- In-app **Install App** button when the browser supports PWA install
+
+### Downloads
+- `drone-flight-test-reporter-desktop-1.0.1.zip` — install as an app on this computer
+- `drone-flight-test-reporter-web-1.0.1.zip` — browser package
+- `drone-flight-test-reporter-ios-1.0.1.zip` — iPhone/iPad home-screen package
 
 ## v1.0.0
 
@@ -10,7 +24,3 @@ First public installable release of the browser and iOS PWA builds.
 - Store attachment contents in saved reports; embed images in preview/PDF
 - Add Progressive Web App support for iOS “Add to Home Screen” install
 - Ship downloadable Web and iOS packages
-
-### Downloads
-- `drone-flight-test-reporter-web-1.0.0.zip` — open in any modern desktop/mobile browser
-- `drone-flight-test-reporter-ios-1.0.0.zip` — iOS/iPadOS home-screen install package
