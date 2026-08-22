@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const sharedFields = ['testId','project','objectiveType','objective','location','operator','observer','droneCategory','droneModel','serialNumber','flightController','groundControl','equipmentHardware','weather'];
 const flightFields = ['flightDateTime','batteryId','duration','flightModes','missionPerformed','telemetrySummary','anomalies','expectedBehaviour','immediateAction','findings','operatorNotes','flightResult'];
-const state = { report: {}, flights: [], activeFlight: 0, attachments: [], flightLogPath: '', captureFilePath: '' };
+const state = { report: {}, flights: [], activeFlight: 0, attachments: [], flightLogPath: '', captureFilePath: '', lastVoiceNote: null };
 let recognition = null;
 function esc(value = '') { return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;'); }
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -32,17 +32,17 @@ function evidenceListHTML(attachments = []) {
   }).join('');
 }
 function nowLocal() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,16); }
-function newFlight(number = state.flights.length + 1) { return { id: crypto.randomUUID(), flightNumber:number, flightDateTime:nowLocal(), batteryId:'', duration:'', flightModes:'', missionPerformed:'', telemetrySummary:'', anomalies:'', expectedBehaviour:'', immediateAction:'', findings:'', operatorNotes:'', flightResult:'Pending', flightLogPath:'', captureFilePath:'', attachments:[] }; }
+function newFlight(number = state.flights.length + 1) { return { id: crypto.randomUUID(), flightNumber:number, flightDateTime:nowLocal(), batteryId:'', duration:'', flightModes:'', missionPerformed:'', telemetrySummary:'', anomalies:'', expectedBehaviour:'', immediateAction:'', findings:'', operatorNotes:'', flightResult:'Pending', flightLogPath:'', captureFilePath:'', attachments:[], lastVoiceNote:null }; }
 function readShared() { sharedFields.forEach(k => state.report[k] = $(k).value.trim()); }
 function writeShared() { sharedFields.forEach(k => { $(k).value = state.report[k] || ''; }); }
-function readFlight() { const f=state.flights[state.activeFlight]; if(!f)return; flightFields.forEach(k=>f[k]=$(k).value); f.flightLogPath=state.flightLogPath; f.captureFilePath=state.captureFilePath; f.attachments=[...state.attachments]; }
-function writeFlight() { const f=state.flights[state.activeFlight]; if(!f)return; flightFields.forEach(k=>$(k).value=f[k]??''); state.flightLogPath=f.flightLogPath||''; state.captureFilePath=f.captureFilePath||''; state.attachments=[...(f.attachments||[])]; $('flightTitle').textContent=`Flight ${String(f.flightNumber).padStart(2,'0')}`; $('flightLogPathDisplay').textContent=state.flightLogPath||'Not selected'; $('captureFilePathDisplay').textContent=state.captureFilePath||'Not selected'; renderAttachments(); renderFlights(); }
+function readFlight() { const f=state.flights[state.activeFlight]; if(!f)return; flightFields.forEach(k=>f[k]=$(k).value); f.flightLogPath=state.flightLogPath; f.captureFilePath=state.captureFilePath; f.attachments=[...state.attachments]; f.lastVoiceNote=state.lastVoiceNote||f.lastVoiceNote||null; }
+function writeFlight() { const f=state.flights[state.activeFlight]; if(!f)return; flightFields.forEach(k=>$(k).value=f[k]??''); state.flightLogPath=f.flightLogPath||''; state.captureFilePath=f.captureFilePath||''; state.attachments=[...(f.attachments||[])]; state.lastVoiceNote=f.lastVoiceNote||findLatestVoiceAttachment(state.attachments); $('flightTitle').textContent=`Flight ${String(f.flightNumber).padStart(2,'0')}`; $('flightLogPathDisplay').textContent=state.flightLogPath||'Not selected'; $('captureFilePathDisplay').textContent=state.captureFilePath||'Not selected'; renderAttachments(); renderFlights(); updatePlayVoiceButton(); }
 function renderFlights() { $('flightCount').textContent=state.flights.length; $('flightList').innerHTML=state.flights.map((f,i)=>`<button class="flight-item ${i===state.activeFlight?'active':''}" data-index="${i}"><span>Flight ${String(f.flightNumber).padStart(2,'0')}</span><small>${esc(f.flightResult)}</small></button>`).join(''); document.querySelectorAll('.flight-item').forEach(b=>b.addEventListener('click',()=>{readFlight();state.activeFlight=Number(b.dataset.index);writeFlight();})); }
 function renumberFlights() { state.flights.forEach((f,i)=>f.flightNumber=i+1); }
 function addFlight() { readFlight(); state.flights.push(newFlight()); state.activeFlight=state.flights.length-1; writeFlight(); }
 function removeCurrentFlight() { if(state.flights.length<=1){alert('A report must contain at least one flight.');return;} if(!confirm(`Remove Flight ${String(state.activeFlight+1).padStart(2,'0')} from this report?`))return; state.flights.splice(state.activeFlight,1); renumberFlights(); state.activeFlight=Math.min(state.activeFlight,state.flights.length-1); writeFlight(); }
-function resetReport() { state.report={};state.flights=[newFlight(1)];state.activeFlight=0;state.attachments=[];state.flightLogPath='';state.captureFilePath='';writeShared();writeFlight();$('reportPreview').innerHTML='<p>Add flights and generate the report.</p>'; }
-function loadReport(data) { if(!data||!Array.isArray(data.flights)||!data.flights.length){alert('This JSON file is not a valid Drone Flight Test Report.');return;} state.report={}; sharedFields.forEach(k=>state.report[k]=data[k]||''); state.flights=data.flights.map((f,i)=>({...newFlight(i+1),...f,flightNumber:i+1,attachments:(f.attachments||[]).map(normalizeAttachment),flightLogPath:f.flightLogPath||'',captureFilePath:f.captureFilePath||''})); state.activeFlight=0; writeShared();writeFlight();generate(); }
+function resetReport() { state.report={};state.flights=[newFlight(1)];state.activeFlight=0;state.attachments=[];state.flightLogPath='';state.captureFilePath='';state.lastVoiceNote=null;stopVoicePlayback();writeShared();writeFlight();$('reportPreview').innerHTML='<p>Add flights and generate the report.</p>'; }
+function loadReport(data) { if(!data||!Array.isArray(data.flights)||!data.flights.length){alert('This JSON file is not a valid Drone Flight Test Report.');return;} state.report={}; sharedFields.forEach(k=>state.report[k]=data[k]||''); state.flights=data.flights.map((f,i)=>{ const attachments=(f.attachments||[]).map(normalizeAttachment); return {...newFlight(i+1),...f,flightNumber:i+1,attachments,flightLogPath:f.flightLogPath||'',captureFilePath:f.captureFilePath||'',lastVoiceNote:f.lastVoiceNote||findLatestVoiceAttachment(attachments)}; }); state.activeFlight=0; writeShared();writeFlight();generate(); }
 function renderAttachments() { $('attachmentList').innerHTML=state.attachments.length?state.attachments.map((p,i)=>{ const name=attachmentName(p); return `<div class="attachment-item"><span title="${esc(name)}">${esc(name)}</span><button class="remove-attachment secondary" data-index="${i}">Remove</button></div>`; }).join(''):'<em>No evidence attached.</em>'; document.querySelectorAll('.remove-attachment').forEach(b=>b.addEventListener('click',()=>{readFlight();state.attachments.splice(Number(b.dataset.index),1);writeFlight();})); }
 function timeline(text) { return text.split(/\n+/).map(x=>x.trim()).filter(Boolean).map(line=>{const m=line.match(/^(\d{1,2}:\d{2}(?:\s*[AP]M)?)\s*[—\-:]?\s*(.*)$/i);return m?{time:m[1],note:m[2]}:{time:'',note:line};}); }
 function overallResult() { const r=state.flights.map(f=>f.flightResult); if(r.includes('Fail'))return 'FAIL'; if(r.includes('Aborted'))return 'ABORTED'; if(r.includes('Pass with observations'))return 'PASS WITH OBSERVATIONS'; if(r.length&&r.every(x=>x==='Pass'))return 'PASS'; return 'PENDING'; }
@@ -79,11 +79,71 @@ let voiceDesired = false;
 let mediaRecorder = null;
 let mediaStream = null;
 let recordedChunks = [];
+let voiceAudio = null;
+
+function findLatestVoiceAttachment(attachments = []) {
+  const voiceNotes = (attachments || [])
+    .map(normalizeAttachment)
+    .filter((a) => a.dataUrl && (String(a.type).startsWith('audio/') || String(a.name).startsWith('voice-note-')));
+  return voiceNotes.length ? voiceNotes[voiceNotes.length - 1] : null;
+}
+function updatePlayVoiceButton() {
+  const btn = $('playVoiceButton');
+  if (!btn) return;
+  const hasNote = Boolean(state.lastVoiceNote && state.lastVoiceNote.dataUrl);
+  const listening = Boolean(voiceDesired || (mediaRecorder && mediaRecorder.state === 'recording'));
+  btn.disabled = !hasNote || listening;
+  if (voiceAudio && !voiceAudio.paused) btn.textContent = 'Stop Playback';
+  else btn.textContent = 'Listen to Voice Note';
+}
+function stopVoicePlayback() {
+  if (voiceAudio) {
+    try { voiceAudio.pause(); voiceAudio.currentTime = 0; } catch (err) {}
+    voiceAudio = null;
+  }
+  updatePlayVoiceButton();
+}
+function playVoiceNote() {
+  if (voiceAudio && !voiceAudio.paused) {
+    stopVoicePlayback();
+    setVoiceStatus('Playback stopped.');
+    return;
+  }
+  const note = state.lastVoiceNote || findLatestVoiceAttachment(state.attachments);
+  if (!note || !note.dataUrl) {
+    setVoiceStatus('No recorded voice note to play yet. Record one first.');
+    updatePlayVoiceButton();
+    return;
+  }
+  stopVoicePlayback();
+  voiceAudio = new Audio(note.dataUrl);
+  voiceAudio.onended = () => {
+    voiceAudio = null;
+    setVoiceStatus(`Finished playing ${note.name || 'voice note'}.`);
+    updatePlayVoiceButton();
+  };
+  voiceAudio.onerror = () => {
+    setVoiceStatus('Could not play the recorded voice note.');
+    voiceAudio = null;
+    updatePlayVoiceButton();
+  };
+  voiceAudio.play()
+    .then(() => {
+      setVoiceStatus(`Playing ${note.name || 'voice note'}…`);
+      updatePlayVoiceButton();
+    })
+    .catch((error) => {
+      setVoiceStatus(`Playback failed: ${error.message || error}`);
+      voiceAudio = null;
+      updatePlayVoiceButton();
+    });
+}
 
 function setVoiceStatus(text) { $('voiceStatus').textContent = text; }
 function setVoiceButtons(listening) {
   $('startVoiceButton').disabled = listening;
   $('stopVoiceButton').disabled = !listening;
+  updatePlayVoiceButton();
 }
 function appendOperatorNote(text) {
   if (!text || !String(text).trim()) return;
@@ -197,9 +257,11 @@ async function startAudioRecordingFallback() {
       const existing = new Map(state.attachments.map((a) => [attachmentName(a), normalizeAttachment(a)]));
       existing.set(name, { name, type: blob.type || 'audio/webm', size: blob.size, dataUrl });
       state.attachments = [...existing.values()];
+      state.lastVoiceNote = { name, type: blob.type || 'audio/webm', size: blob.size, dataUrl };
       appendOperatorNote(`Voice audio recorded: ${name}`);
       writeFlight();
-      setVoiceStatus(`Audio voice note saved as attachment: ${name}`);
+      setVoiceStatus(`Audio voice note saved. Click “Listen to Voice Note” to play it back.`);
+      updatePlayVoiceButton();
     } catch (error) {
       setVoiceStatus(`Could not save audio note: ${error.message || error}`);
     } finally {
@@ -214,8 +276,10 @@ async function startAudioRecordingFallback() {
 }
 async function startVoice() {
   if (voiceDesired) return;
+  stopVoicePlayback();
   voiceDesired = true;
   setVoiceStatus('Requesting microphone permission…');
+  updatePlayVoiceButton();
   try {
     await ensureMicrophone();
   } catch (error) {
@@ -265,10 +329,11 @@ function stopVoice() {
     setVoiceButtons(false);
     setVoiceStatus('Voice transcription idle.');
   }
+  updatePlayVoiceButton();
 }
 
 sharedFields.forEach(id=>$(id).addEventListener('input',readShared)); flightFields.forEach(id=>$(id).addEventListener('input',readFlight));
 $('addFlightButton').addEventListener('click',addFlight); $('removeFlightButton').addEventListener('click',removeCurrentFlight); $('newReportButton').addEventListener('click',()=>{if(confirm('Start a new report? Unsaved data will be cleared.'))resetReport();}); $('openReportButton').addEventListener('click',openReport);
-$('selectFlightLogButton').addEventListener('click',()=>selectFile('log')); $('selectCaptureButton').addEventListener('click',()=>selectFile('capture')); $('addAttachmentButton').addEventListener('click',addAttachments); $('startVoiceButton').addEventListener('click',startVoice); $('stopVoiceButton').addEventListener('click',stopVoice); $('generateReportButton').addEventListener('click',generate);
+$('selectFlightLogButton').addEventListener('click',()=>selectFile('log')); $('selectCaptureButton').addEventListener('click',()=>selectFile('capture')); $('addAttachmentButton').addEventListener('click',addAttachments); $('startVoiceButton').addEventListener('click',startVoice); $('stopVoiceButton').addEventListener('click',stopVoice); $('playVoiceButton').addEventListener('click',playVoiceNote); $('generateReportButton').addEventListener('click',generate);
 $('saveDataButton').addEventListener('click',async()=>{const d=reportData();const r=await window.api.saveJSON(d,`${d.testId||'flight-test-report'}.json`);if(!r.canceled)$('voiceStatus').textContent=`Report saved to ${r.filePath}`;}); $('exportMarkdownButton').addEventListener('click',async()=>{const d=reportData();const r=await window.api.saveMarkdown(buildMarkdown(d),`${d.testId||'flight-test-report'}.md`);if(!r.canceled)$('voiceStatus').textContent='Markdown report exported.';}); $('exportPdfButton').addEventListener('click',async()=>{const d=reportData();const r=await window.api.exportPDF(buildReportHTML(d),`${d.testId||'flight-test-report'}.pdf`);if(!r.canceled)$('voiceStatus').textContent='PDF report exported.';});
 resetReport();

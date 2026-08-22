@@ -1,14 +1,17 @@
 # Release Notes — Drone Flight Test Reporter (Web / iOS / Desktop)
 
+## v1.0.7
+
+Play back recorded voice notes.
+
+### Highlights
+- New **Listen to Voice Note** button next to Start/Stop Voice Note
+- Plays the latest recorded audio voice note for the current flight
+- Button switches to **Stop Playback** while audio is playing
+
 ## v1.0.6
 
-Voice notes fix.
-
-### Fixes
-- Request microphone permission before listening
-- Clearer status/errors (including Brave speech-service blocks)
-- Keep listening across pauses
-- Fallback: record an audio voice note and attach it when live transcription fails
+Voice notes fix (mic permission + audio fallback).
 
 ## v1.0.5
 
