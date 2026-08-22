@@ -1,14 +1,14 @@
 # Drone Flight Test Reporter — Web, Desktop & iOS
 
-**Current version:** `1.0.5`
+**Current version:** `1.1.0`
 
 ## Download packages (GitHub Releases)
 
-https://github.com/TectiveJK/drone-flight-test-reporter-web/releases/tag/v1.0.5
+https://github.com/TectiveJK/drone-flight-test-reporter-web/releases/tag/v1.1.0
 
-- **Desktop:** `drone-flight-test-reporter-desktop-1.0.5.zip`
-- **Web:** `drone-flight-test-reporter-web-1.0.5.zip`
-- **iOS:** `drone-flight-test-reporter-ios-1.0.5.zip`
+- **Desktop:** `drone-flight-test-reporter-desktop-1.1.0.zip`
+- **Web:** `drone-flight-test-reporter-web-1.1.0.zip`
+- **iOS:** `drone-flight-test-reporter-ios-1.1.0.zip`
 
 ## Uninstall the old version
 
@@ -37,4 +37,10 @@ chmod +x scripts/*.sh
 ~/.local/bin/drone-flight-test-reporter
 ```
 
-If Brave shows “Opening …” but no window appears, copy the printed `http://127.0.0.1:…. /index.html` URL into Brave manually and keep the terminal open.
+## Features
+
+- Multi-flight reports
+- Evidence file attachments
+- Voice notes with audible WAV playback
+- JSON save/open, Markdown export, Print / PDF export
+- Desktop app window and iOS home-screen install
