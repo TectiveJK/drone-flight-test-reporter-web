@@ -1,27 +1,26 @@
 # Release Notes — Drone Flight Test Reporter (Web / iOS / Desktop)
 
-## v1.0.3
+## v1.0.4
 
-More reliable desktop shortcuts.
+Downloadable desktop package with uninstall support.
 
-### Fixes
-- Detect Dutch/localized Desktop folders (e.g. `Bureaublad`) via `xdg-user-dir`
-- Create a trusted Desktop shortcut named **Drone Flight Test Reporter**
-- Print exact shortcut paths after install
-- Launch command works even when `~/.local/bin` was not on PATH
+### Highlights
+- Desktop package includes `install-desktop.sh` and `uninstall-desktop.sh`
+- Clear uninstall instructions for old installs
+- Web and iOS packages also updated to v1.0.4
 
 ### Downloads
-- `drone-flight-test-reporter-desktop-1.0.3.zip`
-- `drone-flight-test-reporter-web-1.0.3.zip`
-- `drone-flight-test-reporter-ios-1.0.3.zip`
+- **Desktop app package:** `drone-flight-test-reporter-desktop-1.0.4.zip`
+- **Web package:** `drone-flight-test-reporter-web-1.0.4.zip`
+- **iOS package:** `drone-flight-test-reporter-ios-1.0.4.zip`
+
+## v1.0.3
+
+More reliable desktop shortcuts (localized Desktop/Bureaublad folders).
 
 ## v1.0.2
 
 Clearer desktop install packaging.
-
-### Fixes
-- Desktop zip now unpacks into a named folder containing `install-desktop.sh`
-- Added `INSTALL.txt` with exact install commands
 
 ## v1.0.1
 

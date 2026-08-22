@@ -1,41 +1,46 @@
 # Drone Flight Test Reporter — Web, Desktop & iOS
 
-Browser, desktop, and iOS Progressive Web App for professional multi-flight drone test reporting.
+**Current version:** `1.0.4`
 
-**Current version:** `1.0.3`
+## Download packages (GitHub Releases)
 
-## Install as an app on this computer
+https://github.com/TectiveJK/drone-flight-test-reporter-web/releases/tag/v1.0.4
+
+- **Desktop:** `drone-flight-test-reporter-desktop-1.0.4.zip`
+- **Web:** `drone-flight-test-reporter-web-1.0.4.zip`
+- **iOS:** `drone-flight-test-reporter-ios-1.0.4.zip`
+
+## Uninstall the old version
 
 ```bash
-cd ~
-git clone https://github.com/TectiveJK/drone-flight-test-reporter-web.git
-cd drone-flight-test-reporter-web
-git pull
-chmod +x scripts/install-desktop.sh scripts/launch-desktop.sh
-./scripts/install-desktop.sh
+chmod +x scripts/uninstall-desktop.sh
+./scripts/uninstall-desktop.sh
 ```
 
-Then start it with:
+Or one-liner:
+
+```bash
+rm -f ~/.local/bin/drone-flight-test-reporter ~/.local/share/applications/drone-flight-test-reporter.desktop ~/Desktop/"Drone Flight Test Reporter.desktop" ~/Bureaublad/"Drone Flight Test Reporter.desktop"
+rm -rf ~/.local/share/drone-flight-test-reporter
+```
+
+See `UNINSTALL.md`.
+
+## Install the desktop package
+
+1. Download `drone-flight-test-reporter-desktop-1.0.4.zip` from Releases
+2. Unzip and open the folder
+3. Run:
+
+```bash
+chmod +x install-desktop.sh
+./install-desktop.sh
+```
+
+4. Start:
 
 ```bash
 ~/.local/bin/drone-flight-test-reporter
 ```
 
-Or use the Desktop / `Bureaublad` shortcut **Drone Flight Test Reporter**.
-
-Full steps: `INSTALL-DESKTOP.md`
-
-## Features
-
-- Multi-flight reports
-- Evidence file attachments
-- JSON save/open, Markdown export, Print / PDF export
-- Desktop app window and iOS home-screen install
-
-## Local development
-
-```bash
-python3 -m http.server 8080
-```
-
-Open http://localhost:8080
+See `INSTALL-DESKTOP.md`.
