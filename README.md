@@ -1,39 +1,31 @@
-# Drone Flight Test Reporter — Web & iOS
+# Drone Flight Test Reporter — Web, Desktop & iOS
 
-Browser and iOS Progressive Web App (PWA) for professional multi-flight drone test reporting.
+Browser, desktop, and iOS Progressive Web App for professional multi-flight drone test reporting.
 
-**Current version:** `1.0.0`
+**Current version:** `1.0.1`
+
+## Install as an app on this computer
+
+1. Download [`drone-flight-test-reporter-desktop-1.0.1.zip`](https://github.com/TectiveJK/drone-flight-test-reporter-web/releases/download/v1.0.1/drone-flight-test-reporter-desktop-1.0.1.zip)
+2. Unzip
+3. Run `install-desktop.sh` (Linux) or `install-desktop.bat` (Windows)
+4. Launch **Drone Flight Test Reporter** from your app menu / Desktop
+
+Full steps: `INSTALL-DESKTOP.md`
+
+## iOS / iPadOS
+
+Download the iOS zip from [Releases](https://github.com/TectiveJK/drone-flight-test-reporter-web/releases), host/open in Safari, then **Share → Add to Home Screen**.
+
+See `INSTALL-iOS.md`.
 
 ## Features
 
 - Multi-flight reports
-- UAV / aircraft category and model
-- Car / Van plate selection
-- Test Objective Type selection
-- Equipment / Hardware entry
 - Evidence file attachments (images embedded in reports)
-- JSON report save/open
-- Markdown export
-- Print / PDF export
-- Responsive desktop and mobile UI
-- Voice notes where supported by the browser
-- Installable on iPhone/iPad via Add to Home Screen
-
-## Install
-
-### Web
-
-1. Download `drone-flight-test-reporter-web-1.0.0.zip` from [Releases](https://github.com/TectiveJK/drone-flight-test-reporter-web/releases).
-2. Unzip and open `index.html`, or serve the folder with any static web server.
-
-See `INSTALL-WEB.md`.
-
-### iOS / iPadOS
-
-1. Download `drone-flight-test-reporter-ios-1.0.0.zip` from [Releases](https://github.com/TectiveJK/drone-flight-test-reporter-web/releases), **or** open the GitHub Pages URL in Safari.
-2. Tap **Share → Add to Home Screen**.
-
-See `INSTALL-iOS.md`.
+- JSON save/open, Markdown export, Print / PDF export
+- Voice notes where supported
+- Desktop app window and iOS home-screen install
 
 ## Local development
 
@@ -42,7 +34,3 @@ python3 -m http.server 8080
 ```
 
 Open http://localhost:8080
-
-## Releases
-
-See `RELEASES.md` and the GitHub Releases page for packaged downloads.
