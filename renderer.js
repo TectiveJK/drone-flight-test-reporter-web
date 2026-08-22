@@ -74,8 +74,199 @@ async function addAttachments(){
   if (skipped.length) alert(`These files could not be added (over 15 MB or unreadable):\n${skipped.join('\n')}`);
 }
 async function openReport(){ const r=await window.api.openJSON(); if(r.canceled)return; if(r.error){alert(r.error);return;} loadReport(r.data); $('voiceStatus').textContent=`Opened ${r.filePath}`; }
-function startVoice(){ const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){$('voiceStatus').textContent='Voice recognition is not available in this environment.';return;} recognition=new SR();recognition.continuous=true;recognition.interimResults=false;recognition.lang='en-US';recognition.onstart=()=>{$('startVoiceButton').disabled=true;$('stopVoiceButton').disabled=false;$('voiceStatus').textContent='Listening…';};recognition.onresult=e=>{let text='';for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)text+=e.results[i][0].transcript;if(text){const el=$('operatorNotes');el.value+=(el.value?'\n':'')+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+' — '+text.trim();readFlight();}};recognition.onerror=e=>$('voiceStatus').textContent='Voice error: '+e.error;recognition.onend=()=>{$('startVoiceButton').disabled=false;$('stopVoiceButton').disabled=true;$('voiceStatus').textContent='Voice transcription idle.';};recognition.start(); }
-function stopVoice(){if(recognition){recognition.stop();recognition=null;}}
+
+let voiceDesired = false;
+let mediaRecorder = null;
+let mediaStream = null;
+let recordedChunks = [];
+
+function setVoiceStatus(text) { $('voiceStatus').textContent = text; }
+function setVoiceButtons(listening) {
+  $('startVoiceButton').disabled = listening;
+  $('stopVoiceButton').disabled = !listening;
+}
+function appendOperatorNote(text) {
+  if (!text || !String(text).trim()) return;
+  const el = $('operatorNotes');
+  const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  el.value += (el.value ? '\n' : '') + `${stamp} — ${String(text).trim()}`;
+  readFlight();
+}
+function voiceErrorMessage(code) {
+  const map = {
+    'not-allowed': 'Microphone permission denied. Allow mic access for this site, then try again.',
+    'service-not-allowed': 'Speech service blocked (common in Brave). Allow Google speech services or use Chrome, or use audio recording fallback.',
+    'network': 'Speech service network error. Check internet connection, or use Chrome. Audio recording still works offline.',
+    'audio-capture': 'No microphone found or mic is busy.',
+    'no-speech': 'No speech detected. Click Start Voice Note and speak again.',
+    'aborted': 'Voice note stopped.',
+  };
+  return map[code] || `Voice error: ${code}`;
+}
+function getSpeechRecognition() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+async function ensureMicrophone() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error('This browser cannot access the microphone.');
+  }
+  mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  return mediaStream;
+}
+function stopMediaTracks() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach((t) => t.stop());
+    mediaStream = null;
+  }
+}
+function startSpeechRecognition() {
+  const SR = getSpeechRecognition();
+  if (!SR) return false;
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+  recognition.onstart = () => {
+    setVoiceButtons(true);
+    setVoiceStatus('Listening… speak now. Click Stop when finished.');
+  };
+  recognition.onresult = (event) => {
+    let finalText = '';
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const piece = event.results[i][0].transcript;
+      if (event.results[i].isFinal) finalText += piece;
+      else interim += piece;
+    }
+    if (finalText) appendOperatorNote(finalText);
+    if (interim) setVoiceStatus(`Listening… ${interim}`);
+    else if (voiceDesired) setVoiceStatus('Listening… speak now. Click Stop when finished.');
+  };
+  recognition.onerror = (event) => {
+    const code = event.error || 'unknown';
+    setVoiceStatus(voiceErrorMessage(code));
+    if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'network') {
+      // Keep mic recording fallback running if already started.
+      if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        startAudioRecordingFallback().catch(() => {});
+      }
+    }
+  };
+  recognition.onend = () => {
+    if (voiceDesired) {
+      // Chromium ends recognition after pauses; restart while user still wants listening.
+      try { recognition.start(); }
+      catch (err) {
+        setVoiceButtons(false);
+        voiceDesired = false;
+        setVoiceStatus('Voice recognition stopped. Click Start Voice Note to try again.');
+      }
+      return;
+    }
+    setVoiceButtons(false);
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+      setVoiceStatus('Voice transcription idle.');
+    }
+  };
+  recognition.start();
+  return true;
+}
+async function startAudioRecordingFallback() {
+  const stream = mediaStream || await ensureMicrophone();
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(stream);
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data && event.data.size) recordedChunks.push(event.data);
+  };
+  mediaRecorder.onstop = async () => {
+    try {
+      if (!recordedChunks.length) {
+        setVoiceStatus('No audio captured.');
+        return;
+      }
+      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      const ext = (blob.type.includes('mp4') && 'mp4') || (blob.type.includes('ogg') && 'ogg') || 'webm';
+      const name = `voice-note-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('Failed to read audio'));
+        reader.readAsDataURL(blob);
+      });
+      readFlight();
+      const existing = new Map(state.attachments.map((a) => [attachmentName(a), normalizeAttachment(a)]));
+      existing.set(name, { name, type: blob.type || 'audio/webm', size: blob.size, dataUrl });
+      state.attachments = [...existing.values()];
+      appendOperatorNote(`Voice audio recorded: ${name}`);
+      writeFlight();
+      setVoiceStatus(`Audio voice note saved as attachment: ${name}`);
+    } catch (error) {
+      setVoiceStatus(`Could not save audio note: ${error.message || error}`);
+    } finally {
+      stopMediaTracks();
+      mediaRecorder = null;
+      recordedChunks = [];
+    }
+  };
+  mediaRecorder.start();
+  setVoiceButtons(true);
+  setVoiceStatus('Recording audio note… click Stop Voice Note to save it.');
+}
+async function startVoice() {
+  if (voiceDesired) return;
+  voiceDesired = true;
+  setVoiceStatus('Requesting microphone permission…');
+  try {
+    await ensureMicrophone();
+  } catch (error) {
+    voiceDesired = false;
+    setVoiceButtons(false);
+    setVoiceStatus(error && error.name === 'NotAllowedError'
+      ? voiceErrorMessage('not-allowed')
+      : `Microphone error: ${error.message || error}`);
+    return;
+  }
+
+  const hasSpeech = Boolean(getSpeechRecognition());
+  if (hasSpeech) {
+    try {
+      startSpeechRecognition();
+      // Also record audio in parallel so Brave/network speech failures still capture a note.
+      if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        await startAudioRecordingFallback();
+        setVoiceStatus('Listening + recording… speak now. Click Stop when finished.');
+      }
+      return;
+    } catch (error) {
+      setVoiceStatus(`Speech recognition failed: ${error.message || error}. Falling back to audio recording.`);
+    }
+  } else {
+    setVoiceStatus('Live transcription unavailable here. Recording audio note instead…');
+  }
+  try {
+    await startAudioRecordingFallback();
+  } catch (error) {
+    voiceDesired = false;
+    setVoiceButtons(false);
+    stopMediaTracks();
+    setVoiceStatus(`Voice note failed: ${error.message || error}`);
+  }
+}
+function stopVoice() {
+  voiceDesired = false;
+  if (recognition) {
+    try { recognition.onend = null; recognition.stop(); } catch (err) {}
+    recognition = null;
+  }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try { mediaRecorder.stop(); } catch (err) {}
+  } else {
+    stopMediaTracks();
+    setVoiceButtons(false);
+    setVoiceStatus('Voice transcription idle.');
+  }
+}
+
 sharedFields.forEach(id=>$(id).addEventListener('input',readShared)); flightFields.forEach(id=>$(id).addEventListener('input',readFlight));
 $('addFlightButton').addEventListener('click',addFlight); $('removeFlightButton').addEventListener('click',removeCurrentFlight); $('newReportButton').addEventListener('click',()=>{if(confirm('Start a new report? Unsaved data will be cleared.'))resetReport();}); $('openReportButton').addEventListener('click',openReport);
 $('selectFlightLogButton').addEventListener('click',()=>selectFile('log')); $('selectCaptureButton').addEventListener('click',()=>selectFile('capture')); $('addAttachmentButton').addEventListener('click',addAttachments); $('startVoiceButton').addEventListener('click',startVoice); $('stopVoiceButton').addEventListener('click',stopVoice); $('generateReportButton').addEventListener('click',generate);
